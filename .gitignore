@@ -1,0 +1,29 @@
+# Dependencies
+backend/node_modules/
+frontend/node_modules/
+
+# Environment variables
+backend/.env
+frontend/.env
+
+# Logs
+**/npm-debug.log*
+**/yarn-debug.log*
+**/yarn-error.log*
+**/pnpm-debug.log*
+**/logs/
+**/*.log
+
+# Build outputs
+frontend/dist/
+**/.vite/
+
+# Uploads and cache
+backend/uploads/
+**/.cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+
