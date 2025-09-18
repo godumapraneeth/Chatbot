@@ -21,7 +21,10 @@ const app = express();
 // Middlewares
 app.use(express.json());
 app.use(cors({
-  origin:["http://localhost:5173",process.env.FRONTEND_URL],
+  origin:[
+    "https://chatbot-xhqb.vercel.app",
+    "http://localhost:5173"
+  ],
   credentials:true,
 }));
 app.use(morgan("dev"));
