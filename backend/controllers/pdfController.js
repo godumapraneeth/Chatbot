@@ -1,7 +1,7 @@
-// pdfController.js
 import Chat from "../models/Chat.js";
 import cloudinary from "../config/cloudinary.js";
-import pdfParse from "pdf-parse";
+// Import the new library
+import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.js";
 
 export const uploadPDF = async (req, res) => {
   try {
@@ -9,13 +9,10 @@ export const uploadPDF = async (req, res) => {
       return res.status(400).json({ message: "No file uploaded" });
     }
 
-    // Upload file buffer to Cloudinary with OCR enabled
+    // 1. Upload file to Cloudinary for storage
     const uploadResult = await new Promise((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
-        {
-          resource_type: "auto",
-          folder: "pdf-uploads",
-        },
+        { resource_type: "auto", folder: "pdf-uploads" },
         (error, result) => {
           if (error) reject(error);
           else resolve(result);
@@ -24,26 +21,21 @@ export const uploadPDF = async (req, res) => {
       stream.end(req.file.buffer);
     });
 
-    // Try extracting text using pdf-parse
+    // 2. Extract text using pdfjs-dist
+    const pdf = await pdfjsLib.getDocument(req.file.buffer).promise;
     let extractedText = "";
-    try {
-      const pdfData = await pdfParse(req.file.buffer);
-      extractedText = pdfData.text.trim();
-    } catch (err) {
-      console.warn("pdf-parse failed:", err.message);
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      extractedText += textContent.items.map((item) => item.str).join(" ");
     }
-
-    // If pdf-parse failed or returned nothing, fallback to Cloudinary OCR
+    extractedText = extractedText.trim();
+    
     if (!extractedText) {
-      extractedText =
-        uploadResult.info?.ocr?.adv_ocr?.data?.[0]?.fullTextAnnotation?.text ||
-        "";
-      if (!extractedText) {
-        console.warn("⚠️ No text extracted from PDF (both pdf-parse and OCR failed)");
-      }
+        console.warn("⚠️ pdfjs-dist could not extract text from this file.");
     }
 
-    // Save to DB
+    // 3. Save to the database
     let chat = await Chat.findOne({ user: req.user._id });
     if (!chat) {
       chat = new Chat({ user: req.user._id, messages: [], pdfs: [] });
@@ -52,9 +44,8 @@ export const uploadPDF = async (req, res) => {
     chat.pdfs.push({
       originalName: req.file.originalname,
       cloudinaryUrl: uploadResult.secure_url,
-      cloudinaryPublicId: uploadResult.public_id.replace(/\.pdf$/, ""),
+      cloudinaryPublicId: uploadResult.public_id,
       content: extractedText,
-      uploadDate: new Date(),
     });
 
     chat.messages.push({
@@ -67,12 +58,10 @@ export const uploadPDF = async (req, res) => {
     const newPdf = chat.pdfs[chat.pdfs.length - 1];
     res.json({
       message: "✅ PDF uploaded and processed successfully",
-      filename: req.file.originalname,
       pdf: newPdf,
-      textPreview: extractedText.substring(0, 500) + "...",
     });
   } catch (err) {
-    console.error("Cloudinary PDF upload error", err);
+    console.error("PDF upload error", err);
     res.status(500).json({
       message: "Failed to process PDF",
       error: err.message,
